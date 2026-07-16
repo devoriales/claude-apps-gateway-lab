@@ -1,0 +1,29 @@
+# Grows one service per lesson. See VERSION_MANIFEST.md for why each image
+# tag below is pinned to that exact version.
+services:
+  postgres:
+    image: postgres:18.4-alpine
+    container_name: gateway-postgres
+    environment:
+      POSTGRES_DB: gateway
+      POSTGRES_USER: gateway
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      # PostgreSQL 18's official image stores data under a major-version
+      # subdirectory of /var/lib/postgresql (not directly in .../data) —
+      # mount the parent, not the data dir, or the container refuses to boot.
+      - postgres-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gateway -d gateway"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - gateway-net
+
+networks:
+  gateway-net:
+    driver: bridge
+
+volumes:
+  postgres-data:

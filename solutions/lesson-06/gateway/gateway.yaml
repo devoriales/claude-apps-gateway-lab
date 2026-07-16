@@ -1,0 +1,44 @@
+# Run with: claude gateway --config gateway.yaml
+# See VERSION_MANIFEST.md for pinned versions and course/lesson-05 for a
+# walkthrough of every section below.
+
+listen:
+  host: 0.0.0.0
+  port: 8080
+  # A plain http:// public_url is only accepted on loopback -- fine here,
+  # because the gateway is published to the host as localhost:8080.
+  public_url: http://localhost:8080
+
+oidc:
+  # Keycloak's dev-mode issuer reflects back whatever hostname/port the
+  # request used. This string must be reachable -- and resolve to the
+  # identical issuer -- from both the gateway container (Docker DNS) and
+  # the student's browser (via an /etc/hosts entry). See Lesson 4.
+  issuer: http://keycloak:8180/realms/gateway-lab
+  client_id: claude-gateway
+  client_secret: ${OIDC_CLIENT_SECRET}
+  allowed_email_domains:
+    - example.com
+  # Keycloak's default access/id token can omit the groups claim depending
+  # on client scope negotiation; fall back to /userinfo when that happens.
+  userinfo_fallback: true
+  # This lab's minimal realm import doesn't seed the built-in offline_access
+  # client scope, so dropping it here avoids an "Invalid scopes" rejection.
+  # Trade-off: sessions don't silently refresh -- students re-run /login
+  # every session.ttl_hours. Fine for a local lab; production deployments
+  # should keep offline_access. See course/lesson-06 for the full story.
+  scopes: [openid, profile, email]
+
+session:
+  jwt_secret: ${GATEWAY_JWT_SECRET}
+  ttl_hours: 1
+
+store:
+  postgres_url: ${GATEWAY_POSTGRES_URL}
+
+upstreams:
+  - provider: anthropic
+    auth:
+      api_key: ${ANTHROPIC_API_KEY}
+
+auto_include_builtin_models: true

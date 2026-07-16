@@ -1,0 +1,102 @@
+# Grows one service per lesson. See VERSION_MANIFEST.md for why each image
+# tag below is pinned to that exact version.
+services:
+  postgres:
+    image: postgres:18.4-alpine
+    container_name: gateway-postgres
+    environment:
+      POSTGRES_DB: gateway
+      POSTGRES_USER: gateway
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      # PostgreSQL 18's official image stores data under a major-version
+      # subdirectory of /var/lib/postgresql (not directly in .../data) —
+      # mount the parent, not the data dir, or the container refuses to boot.
+      - postgres-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gateway -d gateway"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - gateway-net
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.7.0
+    container_name: gateway-keycloak
+    command: start-dev --import-realm --http-port=8180
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
+    ports:
+      - "8180:8180"
+    volumes:
+      - ./keycloak/realm-export.json:/opt/keycloak/data/import/realm-export.json:ro
+    healthcheck:
+      # The keycloak image ships no curl/wget; the realm import completes
+      # before Keycloak starts listening, so a bare TCP check on 8180 is a
+      # reliable readiness signal.
+      test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/localhost/8180'"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
+    networks:
+      - gateway-net
+
+  gateway:
+    build:
+      context: ./gateway
+      args:
+        CLAUDE_VERSION: "2.1.207"
+    container_name: gateway
+    ports:
+      - "8080:8080"
+    environment:
+      OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET}
+      GATEWAY_JWT_SECRET: ${GATEWAY_JWT_SECRET}
+      GATEWAY_POSTGRES_URL: postgres://gateway:${POSTGRES_PASSWORD}@postgres:5432/gateway?sslmode=disable
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      # Dev-only default so the lab works without editing .env; override in
+      # .env for anything beyond local use. Must be >= 32 characters.
+      GATEWAY_ADMIN_KEY: ${GATEWAY_ADMIN_KEY:-dev-only-gateway-admin-write-key-32ch}
+      # The gateway's SSRF guard blocks outbound loopback connections by
+      # default, separately from the schema check on forward_to.url. Needed
+      # here because the otel-collector is genuine loopback (shared netns).
+      CLAUDE_GATEWAY_ALLOW_LOOPBACK: "1"
+    volumes:
+      - ./gateway/gateway.yaml:/etc/claude/gateway.yaml:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      keycloak:
+        condition: service_healthy
+    restart: on-failure
+    networks:
+      - gateway-net
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.156.0
+    container_name: gateway-otel-collector
+    command: ["--config=/etc/otel-collector-config.yaml"]
+    volumes:
+      - ./otel-collector-config.yaml:/etc/otel-collector-config.yaml:ro
+    # Shares the gateway's network namespace so the collector is reachable
+    # at http://localhost:4318 from the gateway's own process -- genuine
+    # loopback, not just a private IP. The gateway's telemetry.forward_to
+    # schema requires https:// unless the URL is loopback; a bridge-network
+    # hostname like "otel-collector" doesn't qualify even with
+    # CLAUDE_GATEWAY_ALLOW_LOOPBACK=1 set (verified: still rejected). A
+    # service with network_mode: service:X can't also declare its own
+    # networks: or ports:, since it fully inherits the target's stack.
+    network_mode: "service:gateway"
+    depends_on:
+      gateway:
+        condition: service_started
+
+networks:
+  gateway-net:
+    driver: bridge
+
+volumes:
+  postgres-data:

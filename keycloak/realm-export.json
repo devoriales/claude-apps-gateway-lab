@@ -1,0 +1,65 @@
+{
+  "realm": "gateway-lab",
+  "enabled": true,
+  "sslRequired": "none",
+  "registrationAllowed": false,
+  "groups": [
+    { "name": "developers", "path": "/developers" },
+    { "name": "platform-admins", "path": "/platform-admins" }
+  ],
+  "users": [
+    {
+      "username": "alice",
+      "email": "alice@example.com",
+      "emailVerified": true,
+      "firstName": "Alice",
+      "lastName": "Developer",
+      "enabled": true,
+      "groups": ["/developers"],
+      "credentials": [
+        { "type": "password", "value": "alice-dev-pass1", "temporary": false }
+      ]
+    },
+    {
+      "username": "bob",
+      "email": "bob@example.com",
+      "emailVerified": true,
+      "firstName": "Bob",
+      "lastName": "Admin",
+      "enabled": true,
+      "groups": ["/platform-admins"],
+      "credentials": [
+        { "type": "password", "value": "bob-dev-pass1", "temporary": false }
+      ]
+    }
+  ],
+  "clients": [
+    {
+      "clientId": "claude-gateway",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "secret": "dev-only-claude-gateway-secret",
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "redirectUris": ["http://localhost:8080/oauth/callback"],
+      "webOrigins": ["http://localhost:8080"],
+      "protocolMappers": [
+        {
+          "name": "groups",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-group-membership-mapper",
+          "consentRequired": false,
+          "config": {
+            "full.path": "false",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true",
+            "claim.name": "groups"
+          }
+        }
+      ]
+    }
+  ]
+}

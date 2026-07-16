@@ -1,0 +1,74 @@
+# Lesson 10 (bonus): the same gateway.yaml as the main lab, with the
+# upstreams block swapped from Anthropic to Amazon Bedrock. Everything else
+# -- OIDC, session, store, managed policies, admin, telemetry -- is
+# unchanged, because those are gateway concerns, not upstream concerns.
+#
+# To try this yourself: back up gateway/gateway.yaml, replace it with this
+# file's content (or just copy the upstreams: block below into your own),
+# then: docker compose up -d --force-recreate gateway
+#
+# Prerequisites (see course/lesson-10):
+#   - An AWS IAM principal with bedrock:InvokeModel and
+#     bedrock:InvokeModelWithResponseStream on
+#     arn:aws:bedrock:*::foundation-model/anthropic.* and
+#     arn:aws:bedrock:*:*:inference-profile/us.anthropic.*
+#   - Claude model access enabled in the Bedrock console, in the region
+#     below
+#   - AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY / AWS_REGION set in .env
+
+listen:
+  host: 0.0.0.0
+  port: 8080
+  public_url: http://localhost:8080
+
+oidc:
+  issuer: http://keycloak:8180/realms/gateway-lab
+  client_id: claude-gateway
+  client_secret: ${OIDC_CLIENT_SECRET}
+  allowed_email_domains:
+    - example.com
+  userinfo_fallback: true
+  scopes: [openid, profile, email]
+
+session:
+  jwt_secret: ${GATEWAY_JWT_SECRET}
+  ttl_hours: 1
+
+store:
+  postgres_url: ${GATEWAY_POSTGRES_URL}
+
+# The only real change from gateway.yaml: route inference through Amazon
+# Bedrock instead of the Anthropic API. Model IDs the client sends
+# (claude-haiku-4-5, etc.) are translated automatically to Bedrock's
+# us.anthropic.* inference-profile IDs by the built-in catalog.
+upstreams:
+  - provider: bedrock
+    region: ${AWS_REGION}
+    # Empty auth block: picks up AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY
+    # from the container environment via the AWS SDK's default credential
+    # chain. In production, prefer IRSA/instance-role credentials over
+    # static keys -- auth: {} picks those up too, with no config change.
+    auth: {}
+
+auto_include_builtin_models: true
+
+managed:
+  policies:
+    - match: { groups: [developers] }
+      cli:
+        availableModels: [claude-haiku-4-5, claude-sonnet-4-6]
+        enforceAvailableModels: true
+    - match: { groups: [platform-admins] }
+      cli:
+        availableModels: [claude-haiku-4-5, claude-sonnet-4-6, claude-opus-4-8]
+        enforceAvailableModels: true
+
+admin:
+  write_keys:
+    - { id: lab-admin, key: "${GATEWAY_ADMIN_KEY}" }
+
+telemetry:
+  forward_to:
+    - url: http://localhost:4318
+      metrics: true
+      logs: true

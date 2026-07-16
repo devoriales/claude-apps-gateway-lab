@@ -1,0 +1,23 @@
+receivers:
+  otlp:
+    protocols:
+      http:
+        # Bound to literal IPv4 loopback, not a 0.0.0.0/[::] wildcard: this
+        # collector shares the gateway container's network namespace (see
+        # docker-compose.yml) and only needs to be reachable from there. A
+        # wildcard bind was observed landing IPv6-only in this environment,
+        # which silently refused the gateway's IPv4 localhost connections.
+        endpoint: 127.0.0.1:4318
+
+exporters:
+  debug:
+    verbosity: detailed
+
+service:
+  pipelines:
+    metrics:
+      receivers: [otlp]
+      exporters: [debug]
+    logs:
+      receivers: [otlp]
+      exporters: [debug]
