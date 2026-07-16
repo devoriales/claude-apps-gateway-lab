@@ -1,6 +1,6 @@
 # Claude Apps Gateway — Hands-On Lab
 
-The companion repository for the **[Learn the Claude Apps Gateway (Hands-On)]([https://devoriales.com](https://devoriales.com/quiz/24/learn-the-claude-apps-gateway-hands-on))**
+The companion repository for the **[Learn the Claude Apps Gateway (Hands-On)](https://devoriales.com](https://devoriales.com/quiz/24/learn-the-claude-apps-gateway-hands-on)**
 course on devoriales.com.
 
 You'll stand up a self-hosted
